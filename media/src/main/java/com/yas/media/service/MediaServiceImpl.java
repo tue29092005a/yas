@@ -110,3 +110,5 @@ public class MediaServiceImpl implements MediaService {
                 .build().toUriString();
     }
 }
+
+// Test CI
