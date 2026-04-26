@@ -3,7 +3,7 @@ pipeline {
     
     tools {
         jdk 'jdk21' 
-        maven 'maven3'
+        maven 'maven3' 
     }
 
     stages {
@@ -13,10 +13,7 @@ pipeline {
             }
             steps {
                 echo "Đang tiến hành Build và Test cho Media Service..."
-                
-                dir('media') {
-                    sh 'mvn clean test'
-                }
+                sh 'mvn clean test -pl media -am'
             }
             post {
                 always {
