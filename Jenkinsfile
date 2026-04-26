@@ -11,15 +11,16 @@ pipeline {
                 changeset "media/**" 
             }
             steps {
-                echo "Dang ttien hanh Build va Test cho Media Service..."
+                echo "Đang tiến hành Build và Test cho Media Service..."
+                
                 dir('media') {
-                    sh 'chmod +x gradlew' 
-                    sh './gradlew build'
+                    sh 'chmod +x ../mvnw' 
+                    sh '../mvnw clean test'
                 }
             }
             post {
                 always {
-                    junit 'media/build/test-results/**/*.xml' 
+                    junit 'media/target/surefire-reports/*.xml' 
                 }
             }
         }
