@@ -1,23 +1,51 @@
 pipeline {
-    agent any 
-    
+    agent any
+
     tools {
-        jdk 'jdk25' 
-        maven 'maven3' 
+        jdk 'jdk25'
+        maven 'maven3'
     }
 
     stages {
-        stage('Build & Test - Media Service') {
-            when {
-                changeset "media/**" 
-            }
-            steps {
-                echo "Đang tiến hành Build và Test cho Media Service..."
-                sh 'mvn clean test -pl media -am'
-            }
-            post {
-                always {
-                    junit 'media/target/surefire-reports/*.xml' 
+        stage('Build & Test All Services') {
+            matrix {
+                axes {
+                    axis {
+                        name 'SERVICE_NAME'
+                        values 'media', 'product', 'cart', 'location', 'order', 'customer', 'rating', 'inventory', 'tax', 'search'
+                    }
+                }
+                stages {
+                    stage('Build Phase') {
+                        when {
+                            anyOf {
+                                changeset "${SERVICE_NAME}/**"
+                                environment name: 'FORCE_BUILD_ALL', value: 'true'
+                            }
+                        }
+                        steps {
+                            echo "Đang Build service: ${SERVICE_NAME}..."
+                            sh "mvn clean compile -pl ${SERVICE_NAME} -am"
+                        }
+                    }
+                    stage('Test Phase') {
+                        when {
+                            anyOf {
+                                changeset "${SERVICE_NAME}/**"
+                                environment name: 'FORCE_BUILD_ALL', value: 'true'
+                            }
+                        }
+                        steps {
+                            echo "Đang Test service: ${SERVICE_NAME}..."
+                            sh "mvn test -pl ${SERVICE_NAME} -am" 
+                        }
+                        post {
+                            always {
+                                junit allowEmptyResults: true, 
+                                      testResults: "${SERVICE_NAME}/target/surefire-reports/*.xml"
+                            }
+                        }
+                    }
                 }
             }
         }
