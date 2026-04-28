@@ -1,0 +1,45 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  test:
+    name: test # Tên này sẽ hiển thị trong ô tìm kiếm Status checks của bạn
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: In kết quả Test
+        run: echo "Test thành công!"
+        
+      - name: Tạo file report giả để upload
+        run: |
+          mkdir coverage test-results
+          echo "Day la ket qua coverage gia lap" > coverage/coverage.txt
+          echo "Day la ket qua test gia lap" > test-results/result.txt
+          
+      - name: Upload Test Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+
+  build:
+    name: build # Tên này sẽ hiển thị trong ô tìm kiếm Status checks của bạn
+    needs: test # Bắt buộc Test chạy xong mới tới Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: In kết quả Build
+        run: echo "Build thành công!"
