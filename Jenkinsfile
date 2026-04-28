@@ -49,8 +49,8 @@ pipeline {
                                     classPattern: "${SERVICE_NAME}/target/classes",
                                     sourcePattern: "${SERVICE_NAME}/src/main/java",
                                     changeBuildStatus: true,
-                                    minimumLineCoverage: '30', 
-                                    maximumLineCoverage: '35'       
+                                    minimumLineCoverage: '70', 
+                                    maximumLineCoverage: '75'       
                                 )
                             }
                         }
