@@ -1,5 +1,6 @@
-name: CI Pipeline
-
+# hiện tên thẳng trên giao diện github
+name: CI Pipeline 
+# Đây là một workflow CI đơn giản với hai job: test và build. Job test sẽ chạy trước và tạo ra các artifact giả để minh họa việc upload kết quả test và coverage. Job build sẽ chạy sau khi job test hoàn thành thành công. Bạn có thể thay thế phần run trong mỗi step bằng các lệnh thực tế để chạy test và build dự án của bạn.
 on:
   push:
     branches:
@@ -22,7 +23,7 @@ jobs:
           mkdir coverage test-results
           echo "Day la ket qua coverage gia lap" > coverage/coverage.txt
           echo "Day la ket qua test gia lap" > test-results/result.txt
-          
+#tạo artifact để upload        
       - name: Upload Test Coverage
         uses: actions/upload-artifact@v4
         with:
