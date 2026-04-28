@@ -26,3 +26,5 @@ public class Media {
 
     private String mediaType;
 }
+
+// Test CI
