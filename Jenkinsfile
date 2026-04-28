@@ -50,7 +50,7 @@ pipeline {
                                     sourcePattern: "${SERVICE_NAME}/src/main/java",
                                     changeBuildStatus: true,
                                     minimumLineCoverage: '70', 
-                                    maximumLineCoverage: '75'  
+                                    maximumLineCoverage: '75'       
                                 )
                             }
                         }
