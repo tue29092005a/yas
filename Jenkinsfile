@@ -37,7 +37,7 @@ pipeline {
                         }
                         steps {
                             echo "Đang Test và Đo lường độ phủ cho service: ${SERVICE_NAME}..."
-                            sh "mvn clean test org.jacoco:jacoco-maven-plugin:prepare-agent org.jacoco:jacoco-maven-plugin:report -pl ${SERVICE_NAME} -am" 
+                            sh "mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent test org.jacoco:jacoco-maven-plugin:report -pl ${SERVICE_NAME} -am" 
                         }
                         post {
                             always {
