@@ -5,10 +5,13 @@ on:
   push:
     branches:
       - '**'
+      - '!main' # vì ko cho push lên main 
   pull_request:
     branches:
-      - '**'
-
+      - 'main'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     name: test # Tên này sẽ hiển thị trong ô tìm kiếm Status checks của bạn
@@ -23,7 +26,8 @@ jobs:
           mkdir coverage test-results
           echo "Day la ket qua coverage gia lap" > coverage/coverage.txt
           echo "Day la ket qua test gia lap" > test-results/result.txt
-#tạo artifact để upload        
+
+#tạo artifact để upload / tạo độ phủ cho testcase  
       - name: Upload Test Coverage
         uses: actions/upload-artifact@v4
         with:

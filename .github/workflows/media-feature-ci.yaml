@@ -1,0 +1,94 @@
+name: Media Service - Feature CI
+
+on:
+  push:
+    branches:
+      - 'test_feature_media*'
+      - 'features/media/*'
+    paths:
+      - 'media/**'
+      - '.github/workflows/actions/action.yaml'
+      - 'pom.xml'
+  workflow_dispatch:
+
+jobs:
+  test_and_scan:
+    name: Security Scan & Unit Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java/Maven Environment
+        uses: ./.github/workflows/actions
+
+      - name: Snyk Security Scan
+        uses: snyk/actions/maven@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Run JUnit Tests & Generate Coverage
+        run: mvn clean test -pl media -am
+
+      # Tích hợp dorny/test-reporter để hiển thị UI trên GitHub Actions
+      - name: Test Results Visualization
+        uses: dorny/test-reporter@v1
+        if: success() || failure() # Đảm bảo step này luôn chạy để bắt được log lỗi nếu test fail
+        with:
+          name: Media-Service-Unit-Test-Results
+          path: "media/**/*-reports/TEST*.xml"
+          reporter: java-junit
+
+      - name: Enforce Code Coverage Limit
+        if: success() # Chỉ kiểm tra coverage nếu unit test đã pass
+        run: |
+          REPORT_PATH="media/target/site/jacoco/jacoco.csv"
+          
+          if [ ! -f "$REPORT_PATH" ]; then
+            echo "❌ Không tìm thấy file báo cáo coverage. Vui lòng kiểm tra lại cấu hình Jacoco plugin."
+            exit 1
+          fi
+
+          COVERAGE=$(awk -F"," '{ instructions += $4 + $5; covered += $5 } END { print (covered/instructions)*100 }' $REPORT_PATH)
+          echo "Current Coverage: $COVERAGE%"
+          
+          if (( $(echo "$COVERAGE < 70.0" | bc -l) )); then
+            echo "❌ Code coverage ($COVERAGE%) đang thấp hơn mức yêu cầu (70%). Pipeline failed!"
+            exit 1
+          else
+            echo "✅ Code coverage đạt $COVERAGE% (>= 70%)."
+          fi
+
+      - name: Analyze with SonarCloud
+        if: success()
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -pl media -am \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+
+  build:
+    name: Build Media Service
+    needs: test_and_scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java/Maven Environment
+        uses: ./.github/workflows/actions
+
+      - name: Run Maven Build Command
+        run: mvn clean install -pl media -am -DskipTests
