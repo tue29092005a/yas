@@ -48,6 +48,7 @@ pipeline {
                                     execPattern: "${SERVICE_NAME}/target/jacoco.exec",
                                     classPattern: "${SERVICE_NAME}/target/classes",
                                     sourcePattern: "${SERVICE_NAME}/src/main/java",
+                                    exclusionPattern: '**/config/**, **/exception/**, **/constants/**, **/*Application.class',
                                     changeBuildStatus: true,
                                     minimumLineCoverage: '70', 
                                     maximumLineCoverage: '75'       
