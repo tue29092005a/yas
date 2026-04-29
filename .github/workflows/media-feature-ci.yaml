@@ -30,12 +30,15 @@ jobs:
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
 
+# Cài đặt Snyk CLI trực tiếp lên Github Runner
+      - name: Setup Snyk CLI
+        uses: snyk/actions/setup@master
+
+      # Chạy Snyk bằng command line thuần túy
       - name: Snyk Security Scan
-        uses: snyk/actions/maven@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
+        run: snyk test --severity-threshold=high --file=media/pom.xml
 
       - name: Run JUnit Tests & Generate Coverage
         run: mvn clean test -pl media -am
@@ -46,7 +49,7 @@ jobs:
         if: success() || failure() # Đảm bảo step này luôn chạy để bắt được log lỗi nếu test fail
         with:
           name: Media-Service-Unit-Test-Results
-          path: "media/**/*-reports/TEST*.xml"
+          path: "media/target/surefire-reports/TEST*.xml"
           reporter: java-junit
 
       - name: Enforce Code Coverage Limit
