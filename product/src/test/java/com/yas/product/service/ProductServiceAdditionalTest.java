@@ -226,7 +226,7 @@ class ProductServiceAdditionalTest {
                 .metaKeyword("mk").metaDescription("md").build();
         p.setBrand(brand);
 
-        when(productRepository.getExportingProducts("laptop", "brandx"))
+        when(productRepository.getExportingProducts("laptop", "BrandX"))
                 .thenReturn(List.of(p));
 
         var result = productService.exportProducts(" Laptop ", " BrandX ");
