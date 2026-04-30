@@ -12,11 +12,11 @@ class AbstractCircuitBreakFallbackHandlerTest {
     @Test
     void handleBodilessFallback_shouldThrowThrowable() {
         Throwable throwable = new RuntimeException("Test bodiless exception");
-        
+
         Throwable exception = assertThrows(Throwable.class, () -> {
             handler.testBodilessFallback(throwable);
         });
-        
+
         assertEquals("Test bodiless exception", exception.getMessage());
     }
 
@@ -41,3 +41,5 @@ class AbstractCircuitBreakFallbackHandlerTest {
         }
     }
 }
+
+// fix error sonacloud //// fix error sonacloud //
