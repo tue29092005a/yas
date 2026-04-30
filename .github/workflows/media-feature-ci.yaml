@@ -29,24 +29,34 @@ jobs:
 
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
+        id: java-setup
+
+      # Thêm cache để không phải tải lại các dependency của Maven cho mỗi lần chạy
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
 
       - name: Build shared dependencies
         run: mvn clean install -pl common-library -am -DskipTests
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
+          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
+
+      # Đã gộp bước Test và Coverage bị trùng lặp
+      - name: Run JUnit Tests & Generate Coverage
+        run: mvn clean test -pl media -am
+        env:
+          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
 
       - name: Snyk Security Scan
         uses: snyk/actions/maven@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          JAVA_HOME: ${{ env.JAVA_HOME }}
+          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
         with:
           args: --severity-threshold=high --file=media/pom.xml
-
-      - name: Run JUnit Tests & Generate Coverage
-        run: mvn clean test -pl media -am
-        env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
 
   build:
     name: Build Media Service
@@ -59,8 +69,17 @@ jobs:
 
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
+        id: java-setup
+
+      # Dùng lại cache ở job trên để tăng tốc độ build
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
 
       - name: Run Maven Build Command
         run: mvn clean install -pl media -am -DskipTests
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
+          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
