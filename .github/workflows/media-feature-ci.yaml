@@ -30,6 +30,11 @@ jobs:
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
 
+      - name: Resolve Maven Dependencies
+        run: |
+                cd media
+                mvn dependency:resolve -DincludeScope=test
+
       - name: Setup Snyk CLI
         uses: snyk/actions/setup@master
 
@@ -38,7 +43,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
               cd media
-              snyk test --severity-threshold=high
+              snyk test --severity-threshold=high --debug
 
       - name: Run JUnit Tests & Generate Coverage
         run: mvn clean test -pl media -am
