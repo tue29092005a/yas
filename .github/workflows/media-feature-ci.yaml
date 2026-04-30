@@ -32,7 +32,7 @@ jobs:
 
 # Cài đặt Snyk CLI trực tiếp lên Github Runner
       - name: Setup Snyk CLI
-        uses: snyk/actions/setup@master
+        uses: snyk/actions/maven-3-jdk-21@master
 
       # Chạy Snyk bằng command line thuần túy
       - name: Snyk Security Scan
