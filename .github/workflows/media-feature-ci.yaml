@@ -9,7 +9,6 @@ on:
       - 'media/**'
       - '.github/workflows/actions/action.yaml'
       - 'pom.xml'
-      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
@@ -31,27 +30,24 @@ jobs:
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
 
-      - name: Resolve Maven Dependencies
-        run: |
-                cd media
-                mvn dependency:resolve -DincludeScope=test
-
-      - name: Setup Snyk CLI
-        uses: snyk/actions/setup@master
+      - name: Build shared dependencies
+        run: mvn clean install -pl common-library -am -DskipTests
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
 
       - name: Snyk Security Scan
+        uses: snyk/actions/maven@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-              cd media
-              snyk test --severity-threshold=high --debug
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        with:
+          args: --severity-threshold=high --file=media/pom.xml
 
       - name: Run JUnit Tests & Generate Coverage
         run: mvn clean test -pl media -am
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
 
- 
   build:
     name: Build Media Service
     needs: test_and_scan
