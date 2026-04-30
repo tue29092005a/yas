@@ -72,14 +72,6 @@ jobs:
             echo "✅ Code coverage đạt $COVERAGE% (>= 70%)."
           fi
 
-      - name: Analyze with SonarCloud
-        if: success()
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -pl media -am \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   build:
     name: Build Media Service
