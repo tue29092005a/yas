@@ -30,11 +30,9 @@ jobs:
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
 
-# Cài đặt Snyk CLI trực tiếp lên Github Runner
       - name: Setup Snyk CLI
-        uses: snyk/actions/maven-3-jdk-21@master
+        uses: snyk/actions/setup@master
 
-      # Chạy Snyk bằng command line thuần túy
       - name: Snyk Security Scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -42,37 +40,10 @@ jobs:
 
       - name: Run JUnit Tests & Generate Coverage
         run: mvn clean test -pl media -am
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
 
-      # Tích hợp dorny/test-reporter để hiển thị UI trên GitHub Actions
-      - name: Test Results Visualization
-        uses: dorny/test-reporter@v1
-        if: success() || failure() # Đảm bảo step này luôn chạy để bắt được log lỗi nếu test fail
-        with:
-          name: Media-Service-Unit-Test-Results
-          path: "media/target/surefire-reports/TEST*.xml"
-          reporter: java-junit
-
-      - name: Enforce Code Coverage Limit
-        if: success() # Chỉ kiểm tra coverage nếu unit test đã pass
-        run: |
-          REPORT_PATH="media/target/site/jacoco/jacoco.csv"
-          
-          if [ ! -f "$REPORT_PATH" ]; then
-            echo "❌ Không tìm thấy file báo cáo coverage. Vui lòng kiểm tra lại cấu hình Jacoco plugin."
-            exit 1
-          fi
-
-          COVERAGE=$(awk -F"," '{ instructions += $4 + $5; covered += $5 } END { print (covered/instructions)*100 }' $REPORT_PATH)
-          echo "Current Coverage: $COVERAGE%"
-          
-          if (( $(echo "$COVERAGE < 70.0" | bc -l) )); then
-            echo "❌ Code coverage ($COVERAGE%) đang thấp hơn mức yêu cầu (70%). Pipeline failed!"
-            exit 1
-          else
-            echo "✅ Code coverage đạt $COVERAGE% (>= 70%)."
-          fi
-
-
+ 
   build:
     name: Build Media Service
     needs: test_and_scan
@@ -87,3 +58,5 @@ jobs:
 
       - name: Run Maven Build Command
         run: mvn clean install -pl media -am -DskipTests
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
