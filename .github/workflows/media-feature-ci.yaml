@@ -36,7 +36,9 @@ jobs:
       - name: Snyk Security Scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --severity-threshold=high --file=media/pom.xml
+        run: |
+              cd media
+              snyk test --severity-threshold=high
 
       - name: Run JUnit Tests & Generate Coverage
         run: mvn clean test -pl media -am
