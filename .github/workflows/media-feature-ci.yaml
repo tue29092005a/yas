@@ -31,6 +31,8 @@ jobs:
         uses: ./.github/workflows/actions
         id: java-setup
 
+      - name: Make mvnw executable
+        run: chmod +x mvnw
       # Thêm cache để không phải tải lại các dependency của Maven cho mỗi lần chạy
       - name: Cache Maven packages
         uses: actions/cache@v4
@@ -58,6 +60,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           _JAVA_OPTIONS: "-Xmx2g -Xms512m"
         with:
+          command : code test
           args: --severity-threshold=high --file=media/pom.xml --debug
 
   build:
