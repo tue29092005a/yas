@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,9 +34,7 @@ import java.math.BigDecimal;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -64,6 +61,17 @@ class OrderServiceTest {
 
     @InjectMocks
     private OrderService orderService;
+
+    private Pair<ZonedDateTime, ZonedDateTime> timePair;
+    private Pair<String, String> billingPair;
+    private Pair<Integer, Integer> pageInfo;
+
+    @BeforeEach
+    void setUp() {
+        timePair = Pair.of(ZonedDateTime.now().minusDays(7), ZonedDateTime.now());
+        billingPair = Pair.of("Vietnam", "0123");
+        pageInfo = Pair.of(0, 10);
+    }
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -124,430 +132,337 @@ class OrderServiceTest {
 
     // ── createOrder ───────────────────────────────────────────────────────────
 
-    @Nested
-    class CreateOrderTest {
+    @Test
+    void createOrder_savesOrderAndItems_returnsOrderVm() {
+        OrderPostVm vm = buildOrderPostVm();
+        Order saved = buildOrder(1L, OrderStatus.PENDING);
 
-        @Test
-        void createOrder_savesOrderAndItems_returnsOrderVm() {
-            OrderPostVm vm = buildOrderPostVm();
-            Order saved = buildOrder(1L, OrderStatus.PENDING);
+        when(orderRepository.save(any())).thenReturn(saved);
+        when(orderItemRepository.saveAll(any())).thenReturn(List.of());
+        when(orderRepository.findById(any())).thenReturn(Optional.of(saved));
+        doNothing().when(cartService).deleteCartItems(any());
+        doNothing().when(productService).subtractProductStockQuantity(any());
+        doNothing().when(promotionService).updateUsagePromotion(anyList());
 
-            when(orderRepository.save(any())).thenReturn(saved);
-            when(orderItemRepository.saveAll(any())).thenReturn(List.of());
-            // acceptOrder is called internally after save; it calls findById(order.getId()).
-            // The saved object's id comes from what orderRepository.save() returns.
-            // We also need a second save for acceptOrder - same mock handles it.
-            when(orderRepository.findById(any())).thenReturn(Optional.of(saved));
-            doNothing().when(cartService).deleteCartItems(any());
-            doNothing().when(productService).subtractProductStockQuantity(any());
-            doNothing().when(promotionService).updateUsagePromotion(anyList());
+        OrderVm result = orderService.createOrder(vm);
 
-            OrderVm result = orderService.createOrder(vm);
-
-            assertThat(result).isNotNull();
-            assertThat(result.email()).isEqualTo("test@test.com");
-            assertThat(result.checkoutId()).isEqualTo("checkout-1");
-            verify(orderRepository, org.mockito.Mockito.times(2)).save(any());
-            verify(orderItemRepository).saveAll(any());
-        }
+        assertThat(result).isNotNull();
+        assertThat(result.email()).isEqualTo("test@test.com");
+        assertThat(result.checkoutId()).isEqualTo("checkout-1");
+        verify(orderItemRepository).saveAll(any());
     }
 
     // ── getOrderWithItemsById ─────────────────────────────────────────────────
 
-    @Nested
-    class GetOrderWithItemsByIdTest {
+    @Test
+    void getOrderWithItemsById_whenFound_returnsVmWithItems() {
+        Order order = buildOrder(10L, OrderStatus.ACCEPTED);
+        OrderItem item = OrderItem.builder()
+                .productId(1L).productName("Phone").quantity(1)
+                .productPrice(BigDecimal.valueOf(100)).orderId(10L).build();
 
-        @Test
-        void getOrderWithItemsById_whenFound_returnsVm() {
-            Order order = buildOrder(10L, OrderStatus.ACCEPTED);
-            OrderItem item = OrderItem.builder()
-                    .productId(1L).productName("Phone").quantity(1)
-                    .productPrice(BigDecimal.valueOf(100)).orderId(10L).build();
+        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderItemRepository.findAllByOrderId(10L)).thenReturn(List.of(item));
 
-            when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
-            when(orderItemRepository.findAllByOrderId(10L)).thenReturn(List.of(item));
+        OrderVm result = orderService.getOrderWithItemsById(10L);
 
-            OrderVm result = orderService.getOrderWithItemsById(10L);
+        assertThat(result.id()).isEqualTo(10L);
+        assertThat(result.orderItemVms()).hasSize(1);
+    }
 
-            assertThat(result.id()).isEqualTo(10L);
-            assertThat(result.orderItemVms()).hasSize(1);
-        }
-
-        @Test
-        void getOrderWithItemsById_whenNotFound_throwsNotFoundException() {
-            when(orderRepository.findById(99L)).thenReturn(Optional.empty());
-
-            assertThrows(NotFoundException.class, () -> orderService.getOrderWithItemsById(99L));
-        }
+    @Test
+    void getOrderWithItemsById_whenNotFound_throwsNotFoundException() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> orderService.getOrderWithItemsById(99L));
     }
 
     // ── getLatestOrders ───────────────────────────────────────────────────────
 
-    @Nested
-    class GetLatestOrdersTest {
+    @Test
+    void getLatestOrders_whenCountZero_returnsEmpty() {
+        assertThat(orderService.getLatestOrders(0)).isEmpty();
+    }
 
-        @Test
-        void getLatestOrders_whenCountZero_returnsEmpty() {
-            List<OrderBriefVm> result = orderService.getLatestOrders(0);
-            assertThat(result).isEmpty();
-        }
+    @Test
+    void getLatestOrders_whenCountNegative_returnsEmpty() {
+        assertThat(orderService.getLatestOrders(-5)).isEmpty();
+    }
 
-        @Test
-        void getLatestOrders_whenCountNegative_returnsEmpty() {
-            List<OrderBriefVm> result = orderService.getLatestOrders(-5);
-            assertThat(result).isEmpty();
-        }
+    @Test
+    void getLatestOrders_whenNoOrders_returnsEmpty() {
+        when(orderRepository.getLatestOrders(any())).thenReturn(List.of());
+        assertThat(orderService.getLatestOrders(5)).isEmpty();
+    }
 
-        @Test
-        void getLatestOrders_whenNoOrders_returnsEmpty() {
-            when(orderRepository.getLatestOrders(any())).thenReturn(List.of());
+    @Test
+    void getLatestOrders_whenOrdersExist_returnsMappedList() {
+        Order order = buildOrder(1L, OrderStatus.COMPLETED);
+        when(orderRepository.getLatestOrders(any())).thenReturn(List.of(order));
 
-            List<OrderBriefVm> result = orderService.getLatestOrders(5);
-            assertThat(result).isEmpty();
-        }
+        List<OrderBriefVm> result = orderService.getLatestOrders(3);
 
-        @Test
-        void getLatestOrders_whenOrdersExist_returnsMappedList() {
-            Order order = buildOrder(1L, OrderStatus.COMPLETED);
-            when(orderRepository.getLatestOrders(any())).thenReturn(List.of(order));
-
-            List<OrderBriefVm> result = orderService.getLatestOrders(3);
-
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).id()).isEqualTo(1L);
-        }
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(1L);
     }
 
     // ── getAllOrder ────────────────────────────────────────────────────────────
 
-    @Nested
-    class GetAllOrderTest {
+    @Test
+    @SuppressWarnings("unchecked")
+    void getAllOrder_whenNoResults_returnsEmptyVm() {
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(Page.empty());
 
-        private Pair<ZonedDateTime, ZonedDateTime> timePair;
-        private Pair<String, String> billingPair;
-        private Pair<Integer, Integer> pageInfo;
+        OrderListVm result = orderService.getAllOrder(timePair, "", List.of(),
+                billingPair, "test@test.com", pageInfo);
 
-        @BeforeEach
-        void setUp() {
-            timePair = Pair.of(ZonedDateTime.now().minusDays(7), ZonedDateTime.now());
-            billingPair = Pair.of("Vietnam", "0123");
-            pageInfo = Pair.of(0, 10);
-        }
+        assertThat(result.orderList()).isNull();
+        assertThat(result.totalElements()).isEqualTo(0);
+    }
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void getAllOrder_whenNoResults_returnsEmptyVm() {
-            Page<Order> emptyPage = Page.empty();
-            when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
-                    .thenReturn(emptyPage);
+    @Test
+    @SuppressWarnings("unchecked")
+    void getAllOrder_whenOrdersExist_returnsList() {
+        Order order = buildOrder(1L, OrderStatus.PENDING);
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
 
-            OrderListVm result = orderService.getAllOrder(timePair, "", List.of(),
-                    billingPair, "test@test.com", pageInfo);
+        OrderListVm result = orderService.getAllOrder(timePair, "", List.of(OrderStatus.PENDING),
+                billingPair, "", pageInfo);
 
-            assertThat(result.orderList()).isNull();
-            assertThat(result.totalElements()).isEqualTo(0);
-        }
+        assertThat(result.orderList()).hasSize(1);
+        assertThat(result.totalElements()).isEqualTo(1L);
+    }
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void getAllOrder_whenOrdersExist_returnsList() {
-            Order order = buildOrder(1L, OrderStatus.PENDING);
-            Page<Order> page = new PageImpl<>(List.of(order));
-            when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
-                    .thenReturn(page);
+    @Test
+    @SuppressWarnings("unchecked")
+    void getAllOrder_whenStatusListEmpty_usesAllStatuses() {
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(Page.empty());
 
-            OrderListVm result = orderService.getAllOrder(timePair, "", List.of(OrderStatus.PENDING),
-                    billingPair, "", pageInfo);
-
-            assertThat(result.orderList()).hasSize(1);
-            assertThat(result.totalElements()).isEqualTo(1L);
-        }
-
-        @Test
-        @SuppressWarnings("unchecked")
-        void getAllOrder_whenStatusListEmpty_usesAllStatuses() {
-            Page<Order> emptyPage = Page.empty();
-            when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
-                    .thenReturn(emptyPage);
-
-            // Should not throw when orderStatus is empty
-            OrderListVm result = orderService.getAllOrder(timePair, null, List.of(),
-                    billingPair, null, pageInfo);
-
-            assertThat(result).isNotNull();
-        }
+        OrderListVm result = orderService.getAllOrder(timePair, null, List.of(), billingPair, null, pageInfo);
+        assertThat(result).isNotNull();
     }
 
     // ── updateOrderPaymentStatus ──────────────────────────────────────────────
 
-    @Nested
-    class UpdateOrderPaymentStatusTest {
+    @Test
+    void updateOrderPaymentStatus_whenCompleted_setsOrderStatusPaid() {
+        Order order = buildOrder(1L, OrderStatus.PENDING);
+        PaymentOrderStatusVm vm = PaymentOrderStatusVm.builder()
+                .orderId(1L).paymentId(42L)
+                .paymentStatus(PaymentStatus.COMPLETED.name()).orderStatus("PENDING").build();
 
-        @Test
-        void updateOrderPaymentStatus_whenCompleted_setsOrderStatusPaid() {
-            Order order = buildOrder(1L, OrderStatus.PENDING);
-            PaymentOrderStatusVm vm = PaymentOrderStatusVm.builder()
-                    .orderId(1L).paymentId(42L)
-                    .paymentStatus(PaymentStatus.COMPLETED.name())
-                    .orderStatus("PENDING")
-                    .build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any())).thenReturn(order);
 
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-            when(orderRepository.save(any())).thenReturn(order);
+        PaymentOrderStatusVm result = orderService.updateOrderPaymentStatus(vm);
 
-            PaymentOrderStatusVm result = orderService.updateOrderPaymentStatus(vm);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(result.paymentId()).isEqualTo(42L);
+        verify(orderRepository).save(order);
+    }
 
-            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
-            assertThat(result.paymentId()).isEqualTo(42L);
-            verify(orderRepository).save(order);
-        }
+    @Test
+    void updateOrderPaymentStatus_whenNotCompleted_doesNotChangeToPaid() {
+        Order order = buildOrder(2L, OrderStatus.PENDING);
+        PaymentOrderStatusVm vm = PaymentOrderStatusVm.builder()
+                .orderId(2L).paymentId(10L)
+                .paymentStatus(PaymentStatus.CANCELLED.name()).orderStatus("PENDING").build();
 
-        @Test
-        void updateOrderPaymentStatus_whenNotCompleted_doesNotChangeToPaid() {
-            Order order = buildOrder(2L, OrderStatus.PENDING);
-            PaymentOrderStatusVm vm = PaymentOrderStatusVm.builder()
-                    .orderId(2L).paymentId(10L)
-                    .paymentStatus(PaymentStatus.CANCELLED.name())
-                    .orderStatus("PENDING")
-                    .build();
+        when(orderRepository.findById(2L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any())).thenReturn(order);
 
-            when(orderRepository.findById(2L)).thenReturn(Optional.of(order));
-            when(orderRepository.save(any())).thenReturn(order);
+        orderService.updateOrderPaymentStatus(vm);
 
-            orderService.updateOrderPaymentStatus(vm);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.CANCELLED);
+    }
 
-            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
-            assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.CANCELLED);
-        }
+    @Test
+    void updateOrderPaymentStatus_whenOrderNotFound_throwsNotFoundException() {
+        PaymentOrderStatusVm vm = PaymentOrderStatusVm.builder()
+                .orderId(99L).paymentId(1L)
+                .paymentStatus(PaymentStatus.PENDING.name()).orderStatus("PENDING").build();
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
 
-        @Test
-        void updateOrderPaymentStatus_whenOrderNotFound_throwsNotFoundException() {
-            PaymentOrderStatusVm vm = PaymentOrderStatusVm.builder()
-                    .orderId(99L).paymentId(1L)
-                    .paymentStatus(PaymentStatus.PENDING.name())
-                    .orderStatus("PENDING")
-                    .build();
-            when(orderRepository.findById(99L)).thenReturn(Optional.empty());
-
-            assertThrows(NotFoundException.class, () -> orderService.updateOrderPaymentStatus(vm));
-        }
+        assertThrows(NotFoundException.class, () -> orderService.updateOrderPaymentStatus(vm));
     }
 
     // ── rejectOrder ───────────────────────────────────────────────────────────
 
-    @Nested
-    class RejectOrderTest {
+    @Test
+    void rejectOrder_setsStatusAndReason() {
+        Order order = buildOrder(5L, OrderStatus.PENDING);
+        when(orderRepository.findById(5L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any())).thenReturn(order);
 
-        @Test
-        void rejectOrder_setsStatusAndReason() {
-            Order order = buildOrder(5L, OrderStatus.PENDING);
-            when(orderRepository.findById(5L)).thenReturn(Optional.of(order));
-            when(orderRepository.save(any())).thenReturn(order);
+        orderService.rejectOrder(5L, "Out of stock");
 
-            orderService.rejectOrder(5L, "Out of stock");
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.REJECT);
+        assertThat(order.getRejectReason()).isEqualTo("Out of stock");
+        verify(orderRepository).save(order);
+    }
 
-            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.REJECT);
-            assertThat(order.getRejectReason()).isEqualTo("Out of stock");
-            verify(orderRepository).save(order);
-        }
-
-        @Test
-        void rejectOrder_whenNotFound_throwsNotFoundException() {
-            when(orderRepository.findById(99L)).thenReturn(Optional.empty());
-
-            assertThrows(NotFoundException.class, () -> orderService.rejectOrder(99L, "reason"));
-        }
+    @Test
+    void rejectOrder_whenNotFound_throwsNotFoundException() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> orderService.rejectOrder(99L, "reason"));
     }
 
     // ── acceptOrder ───────────────────────────────────────────────────────────
 
-    @Nested
-    class AcceptOrderTest {
+    @Test
+    void acceptOrder_setsStatusAccepted() {
+        Order order = buildOrder(3L, OrderStatus.PENDING);
+        when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any())).thenReturn(order);
 
-        @Test
-        void acceptOrder_setsStatusAccepted() {
-            Order order = buildOrder(3L, OrderStatus.PENDING);
-            when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
-            when(orderRepository.save(any())).thenReturn(order);
+        orderService.acceptOrder(3L);
 
-            orderService.acceptOrder(3L);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.ACCEPTED);
+        verify(orderRepository).save(order);
+    }
 
-            assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.ACCEPTED);
-            verify(orderRepository).save(order);
-        }
-
-        @Test
-        void acceptOrder_whenNotFound_throwsNotFoundException() {
-            when(orderRepository.findById(99L)).thenReturn(Optional.empty());
-
-            assertThrows(NotFoundException.class, () -> orderService.acceptOrder(99L));
-        }
+    @Test
+    void acceptOrder_whenNotFound_throwsNotFoundException() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> orderService.acceptOrder(99L));
     }
 
     // ── findOrderByCheckoutId ─────────────────────────────────────────────────
 
-    @Nested
-    class FindOrderByCheckoutIdTest {
+    @Test
+    void findOrderByCheckoutId_whenFound_returnsOrder() {
+        Order order = buildOrder(7L, OrderStatus.PENDING);
+        when(orderRepository.findByCheckoutId("chk-1")).thenReturn(Optional.of(order));
 
-        @Test
-        void findOrderByCheckoutId_whenFound_returnsOrder() {
-            Order order = buildOrder(7L, OrderStatus.PENDING);
-            when(orderRepository.findByCheckoutId("chk-1")).thenReturn(Optional.of(order));
+        Order result = orderService.findOrderByCheckoutId("chk-1");
+        assertThat(result.getId()).isEqualTo(7L);
+    }
 
-            Order result = orderService.findOrderByCheckoutId("chk-1");
-
-            assertThat(result.getId()).isEqualTo(7L);
-        }
-
-        @Test
-        void findOrderByCheckoutId_whenNotFound_throwsNotFoundException() {
-            when(orderRepository.findByCheckoutId("missing")).thenReturn(Optional.empty());
-
-            assertThrows(NotFoundException.class, () -> orderService.findOrderByCheckoutId("missing"));
-        }
+    @Test
+    void findOrderByCheckoutId_whenNotFound_throwsNotFoundException() {
+        when(orderRepository.findByCheckoutId("missing")).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> orderService.findOrderByCheckoutId("missing"));
     }
 
     // ── findOrderVmByCheckoutId ───────────────────────────────────────────────
 
-    @Nested
-    class FindOrderVmByCheckoutIdTest {
+    @Test
+    void findOrderVmByCheckoutId_whenFound_returnsVmWithItems() {
+        Order order = buildOrder(8L, OrderStatus.PAID);
+        OrderItem item = OrderItem.builder()
+                .productId(1L).productName("P").quantity(2)
+                .productPrice(BigDecimal.TEN).orderId(8L).build();
 
-        @Test
-        void findOrderVmByCheckoutId_whenFound_returnsVmWithItems() {
-            Order order = buildOrder(8L, OrderStatus.PAID);
-            OrderItem item = OrderItem.builder()
-                    .productId(1L).productName("P").quantity(2)
-                    .productPrice(BigDecimal.TEN).orderId(8L).build();
+        when(orderRepository.findByCheckoutId("chk-2")).thenReturn(Optional.of(order));
+        when(orderItemRepository.findAllByOrderId(8L)).thenReturn(List.of(item));
 
-            when(orderRepository.findByCheckoutId("chk-2")).thenReturn(Optional.of(order));
-            when(orderItemRepository.findAllByOrderId(8L)).thenReturn(List.of(item));
+        var result = orderService.findOrderVmByCheckoutId("chk-2");
 
-            var result = orderService.findOrderVmByCheckoutId("chk-2");
+        assertThat(result.id()).isEqualTo(8L);
+        assertThat(result.orderItems()).hasSize(1);
+    }
 
-            assertThat(result.id()).isEqualTo(8L);
-            assertThat(result.orderItems()).hasSize(1);
-        }
-
-        @Test
-        void findOrderVmByCheckoutId_whenNotFound_throwsNotFoundException() {
-            when(orderRepository.findByCheckoutId("gone")).thenReturn(Optional.empty());
-
-            assertThrows(NotFoundException.class, () -> orderService.findOrderVmByCheckoutId("gone"));
-        }
+    @Test
+    void findOrderVmByCheckoutId_whenNotFound_throwsNotFoundException() {
+        when(orderRepository.findByCheckoutId("gone")).thenReturn(Optional.empty());
+        assertThrows(NotFoundException.class, () -> orderService.findOrderVmByCheckoutId("gone"));
     }
 
     // ── isOrderCompletedWithUserIdAndProductId ────────────────────────────────
 
-    @Nested
-    class IsOrderCompletedTest {
+    @Test
+    @SuppressWarnings("unchecked")
+    void isOrderCompleted_whenNoVariations_usesProductIdDirectly() {
+        setSubjectUpSecurityContext("user-1");
+        when(productService.getProductVariations(1L)).thenReturn(List.of());
+        when(orderRepository.findOne(any(Specification.class)))
+                .thenReturn(Optional.of(buildOrder(1L, OrderStatus.COMPLETED)));
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void isOrderCompleted_whenNoVariations_usesProductIdDirectly() {
-            setSubjectUpSecurityContext("user-1");
-            when(productService.getProductVariations(1L)).thenReturn(List.of());
-            when(orderRepository.findOne(any(Specification.class))).thenReturn(Optional.of(buildOrder(1L, OrderStatus.COMPLETED)));
+        var result = orderService.isOrderCompletedWithUserIdAndProductId(1L);
+        assertThat(result.isPresent()).isTrue();
+    }
 
-            var result = orderService.isOrderCompletedWithUserIdAndProductId(1L);
+    @Test
+    @SuppressWarnings("unchecked")
+    void isOrderCompleted_whenVariationsExist_usesVariationIds() {
+        setSubjectUpSecurityContext("user-2");
+        ProductVariationVm v1 = new ProductVariationVm(10L, "Red", "sku-red");
+        ProductVariationVm v2 = new ProductVariationVm(11L, "Blue", "sku-blue");
+        when(productService.getProductVariations(5L)).thenReturn(List.of(v1, v2));
+        when(orderRepository.findOne(any(Specification.class))).thenReturn(Optional.empty());
 
-            assertThat(result.isPresent()).isTrue();
-        }
-
-        @Test
-        @SuppressWarnings("unchecked")
-        void isOrderCompleted_whenVariationsExist_usesVariationIds() {
-            setSubjectUpSecurityContext("user-2");
-            ProductVariationVm v1 = new ProductVariationVm(10L, "Red", "sku-red");
-            ProductVariationVm v2 = new ProductVariationVm(11L, "Blue", "sku-blue");
-            when(productService.getProductVariations(5L)).thenReturn(List.of(v1, v2));
-            when(orderRepository.findOne(any(Specification.class))).thenReturn(Optional.empty());
-
-            var result = orderService.isOrderCompletedWithUserIdAndProductId(5L);
-
-            assertThat(result.isPresent()).isFalse();
-        }
+        var result = orderService.isOrderCompletedWithUserIdAndProductId(5L);
+        assertThat(result.isPresent()).isFalse();
     }
 
     // ── getMyOrders ───────────────────────────────────────────────────────────
 
-    @Nested
-    class GetMyOrdersTest {
+    @Test
+    @SuppressWarnings("unchecked")
+    void getMyOrders_returnsOrderGetVmList() {
+        setSubjectUpSecurityContext("user-3");
+        Order order = buildOrder(20L, OrderStatus.SHIPPING);
+        when(orderRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
+                .thenReturn(List.of(order));
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void getMyOrders_returnsOrderGetVmList() {
-            setSubjectUpSecurityContext("user-3");
-            Order order = buildOrder(20L, OrderStatus.SHIPPING);
-            when(orderRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
-                    .thenReturn(List.of(order));
+        var result = orderService.getMyOrders("Phone", OrderStatus.SHIPPING);
 
-            var result = orderService.getMyOrders("Phone", OrderStatus.SHIPPING);
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(20L);
+    }
 
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).id()).isEqualTo(20L);
-        }
+    @Test
+    @SuppressWarnings("unchecked")
+    void getMyOrders_whenNoOrders_returnsEmptyList() {
+        setSubjectUpSecurityContext("user-4");
+        when(orderRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
+                .thenReturn(List.of());
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void getMyOrders_whenNoOrders_returnsEmptyList() {
-            setSubjectUpSecurityContext("user-4");
-            when(orderRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
-                    .thenReturn(List.of());
-
-            var result = orderService.getMyOrders(null, null);
-
-            assertThat(result).isEmpty();
-        }
+        var result = orderService.getMyOrders(null, null);
+        assertThat(result).isEmpty();
     }
 
     // ── exportCsv ─────────────────────────────────────────────────────────────
 
-    @Nested
-    class ExportCsvTest {
+    @Test
+    @SuppressWarnings("unchecked")
+    void exportCsv_whenNoOrders_returnsEmptyCsvBytes() throws Exception {
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(Page.empty());
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void exportCsv_whenNoOrders_returnsEmptyCsvBytes() throws Exception {
-            Page<Order> emptyPage = Page.empty();
-            when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
-                    .thenReturn(emptyPage);
+        OrderRequest req = OrderRequest.builder()
+                .createdFrom(ZonedDateTime.now().minusDays(1)).createdTo(ZonedDateTime.now())
+                .productName("").orderStatus(List.of())
+                .billingCountry("").billingPhoneNumber("").email("")
+                .pageNo(0).pageSize(10).build();
 
-            OrderRequest req = OrderRequest.builder()
-                    .createdFrom(ZonedDateTime.now().minusDays(1))
-                    .createdTo(ZonedDateTime.now())
-                    .productName("").orderStatus(List.of())
-                    .billingCountry("").billingPhoneNumber("").email("")
-                    .pageNo(0).pageSize(10).build();
+        byte[] csv = orderService.exportCsv(req);
+        assertThat(csv).isNotNull();
+    }
 
-            byte[] csv = orderService.exportCsv(req);
+    @Test
+    @SuppressWarnings("unchecked")
+    void exportCsv_whenOrdersExist_returnsCsvWithRows() throws Exception {
+        Order order = buildOrder(1L, OrderStatus.COMPLETED);
+        when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(order)));
 
-            // Only header line present when no data
-            assertThat(csv).isNotNull();
-        }
+        com.yas.order.model.csv.OrderItemCsv csvRow =
+                com.yas.order.model.csv.OrderItemCsv.builder().build();
+        when(orderMapper.toCsv(any())).thenReturn(csvRow);
 
-        @Test
-        @SuppressWarnings("unchecked")
-        void exportCsv_whenOrdersExist_returnsCsvBytes() throws Exception {
-            Order order = buildOrder(1L, OrderStatus.COMPLETED);
-            Page<Order> page = new PageImpl<>(List.of(order));
-            when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
-                    .thenReturn(page);
+        OrderRequest req = OrderRequest.builder()
+                .createdFrom(ZonedDateTime.now().minusDays(7)).createdTo(ZonedDateTime.now())
+                .productName("").orderStatus(List.of(OrderStatus.COMPLETED))
+                .billingCountry("Vietnam").billingPhoneNumber("0123").email("")
+                .pageNo(0).pageSize(10).build();
 
-            com.yas.order.model.csv.OrderItemCsv csvRow =
-                    com.yas.order.model.csv.OrderItemCsv.builder().build();
-            when(orderMapper.toCsv(any())).thenReturn(csvRow);
+        byte[] csv = orderService.exportCsv(req);
 
-            OrderRequest req = OrderRequest.builder()
-                    .createdFrom(ZonedDateTime.now().minusDays(7))
-                    .createdTo(ZonedDateTime.now())
-                    .productName("").orderStatus(List.of(OrderStatus.COMPLETED))
-                    .billingCountry("Vietnam").billingPhoneNumber("0123").email("")
-                    .pageNo(0).pageSize(10).build();
-
-            byte[] csv = orderService.exportCsv(req);
-
-            assertThat(csv).isNotNull();
-            verify(orderMapper).toCsv(any());
-        }
+        assertThat(csv).isNotNull();
+        verify(orderMapper).toCsv(any());
     }
 }
