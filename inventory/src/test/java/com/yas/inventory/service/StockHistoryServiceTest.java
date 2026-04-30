@@ -59,7 +59,7 @@ class StockHistoryServiceTest {
             .reservedQuantity(0L)
             .build();
     }
-
+    // force rebuild
     // =====================================================================
     // createStockHistories
     // =====================================================================
