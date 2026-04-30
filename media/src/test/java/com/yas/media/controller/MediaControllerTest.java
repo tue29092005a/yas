@@ -240,6 +240,45 @@ class MediaControllerTest {
         }
     }
 
+    // ===================== GET /medias/{id}/file/{fileName} =====================
+    @Nested
+    class GetFileTest {
+
+        @Test
+        void testGetFile_whenFileExists_shouldReturnOkWithContent() throws Exception {
+            byte[] content = "fake-image-bytes".getBytes();
+            java.io.InputStream inputStream = new java.io.ByteArrayInputStream(content);
+
+            com.yas.media.model.dto.MediaDto mediaDto = com.yas.media.model.dto.MediaDto.builder()
+                .content(inputStream)
+                .mediaType(org.springframework.http.MediaType.IMAGE_PNG)
+                .build();
+
+            when(mediaService.getFile(1L, "image.png")).thenReturn(mediaDto);
+
+            mockMvc.perform(get("/medias/{id}/file/{fileName}", 1L, "image.png"))
+                .andExpect(status().isOk());
+
+            verify(mediaService, times(1)).getFile(1L, "image.png");
+        }
+
+        @Test
+        void testGetFile_withJpegContent_shouldReturnOk() throws Exception {
+            byte[] content = "jpeg-data".getBytes();
+            com.yas.media.model.dto.MediaDto mediaDto = com.yas.media.model.dto.MediaDto.builder()
+                .content(new java.io.ByteArrayInputStream(content))
+                .mediaType(org.springframework.http.MediaType.IMAGE_JPEG)
+                .build();
+
+            when(mediaService.getFile(2L, "photo.jpg")).thenReturn(mediaDto);
+
+            mockMvc.perform(get("/medias/{id}/file/{fileName}", 2L, "photo.jpg"))
+                .andExpect(status().isOk());
+
+            verify(mediaService, times(1)).getFile(2L, "photo.jpg");
+        }
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
     private Media buildMedia(Long id, String caption, String fileName, String mediaType) {
