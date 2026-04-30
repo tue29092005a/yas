@@ -55,8 +55,10 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
+          NODE_OPTIONS: --max-old-space-size=4096
+          _JAVA_OPTIONS: "-Xmx2g -Xms512m"
         with:
-          args: --severity-threshold=high --file=media/pom.xml
+          args: --severity-threshold=high --file=media/pom.xml --debug
 
   build:
     name: Build Media Service
