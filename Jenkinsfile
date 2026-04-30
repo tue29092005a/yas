@@ -37,7 +37,7 @@ pipeline {
                         }
                         steps {
                             echo "Đang Test và Đo lường độ phủ cho service: ${SERVICE_NAME}..."
-                            sh "mvn test org.jacoco:jacoco-maven-plugin:prepare-agent org.jacoco:jacoco-maven-plugin:report -pl ${SERVICE_NAME} -am" 
+                            sh "mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent test org.jacoco:jacoco-maven-plugin:report -pl ${SERVICE_NAME} -am" 
                         }
                         post {
                             always {
@@ -48,9 +48,10 @@ pipeline {
                                     execPattern: "${SERVICE_NAME}/target/jacoco.exec",
                                     classPattern: "${SERVICE_NAME}/target/classes",
                                     sourcePattern: "${SERVICE_NAME}/src/main/java",
+                                    exclusionPattern: '**/config/**,**/exception/**,**/constants/**,**/*Application.class', 
                                     changeBuildStatus: true,
-                                    minimumLineCoverage: '30', 
-                                    maximumLineCoverage: '35'       
+                                    minimumLineCoverage: '70', 
+                                    maximumLineCoverage: '75'       
                                 )
                             }
                         }

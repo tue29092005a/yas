@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.yas.commonlibrary.exception.BadRequestException;
 import com.yas.commonlibrary.exception.DuplicatedException;
+import com.yas.commonlibrary.exception.NotFoundException;
 import com.yas.product.model.attribute.ProductAttribute;
 import com.yas.product.model.attribute.ProductAttributeGroup;
 import com.yas.product.repository.ProductAttributeGroupRepository;
@@ -126,6 +128,24 @@ class ProductAttributeServiceTest {
 
         assertEquals("Updated Attribute", result.getName());
         assertNull(result.getProductAttributeGroup());
+    }
+
+    // Save a product attribute with a missing group
+    @Test
+    void test_save_product_attribute_with_missing_group() {
+        when(productAttributeGroupRepository.findById(99L)).thenReturn(Optional.empty());
+
+        ProductAttributePostVm postVm = new ProductAttributePostVm("Attribute1", 99L);
+        assertThrows(BadRequestException.class, () -> productAttributeService.save(postVm));
+    }
+
+    // Update a product attribute when it does not exist
+    @Test
+    void test_update_product_attribute_not_found() {
+        when(productAttributeRepository.findById(1L)).thenReturn(Optional.empty());
+
+        ProductAttributePostVm postVm = new ProductAttributePostVm("Updated Attribute", null);
+        assertThrows(NotFoundException.class, () -> productAttributeService.update(postVm, 1L));
     }
 
     // Save a product attribute with a duplicated name
