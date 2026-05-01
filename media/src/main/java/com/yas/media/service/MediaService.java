@@ -17,3 +17,5 @@ public interface MediaService {
 
     List<MediaVm> getMediaByIds(List<Long> ids);
 }
+
+// Test CI
