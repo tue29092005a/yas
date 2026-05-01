@@ -47,3 +47,5 @@ public class TaxServiceTest {
         assertThat(result).hasSize(1).contains(TaxRateVm.fromModel(taxRate));
     }
 }
+
+// force rebuild

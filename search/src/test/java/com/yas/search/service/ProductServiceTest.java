@@ -144,6 +144,27 @@ class ProductServiceTest {
     }
 
     @Test
+    void testFindProductAdvance_whenCriteriaAreNull_ReturnProductListGetVm() {
+        SearchHits<Product> searchHits = getSearchHits();
+
+        SearchPage<Product> productPage = mock(SearchPage.class);
+        when(productPage.getNumber()).thenReturn(0);
+        when(productPage.getSize()).thenReturn(10);
+        when(productPage.getTotalElements()).thenReturn(1L);
+        when(productPage.getTotalPages()).thenReturn(1);
+        when(productPage.isLast()).thenReturn(true);
+
+        when(elasticsearchOperations.search(any(NativeQuery.class), eq(Product.class))).thenReturn(searchHits);
+
+        ProductCriteriaDto criteriaDto = new ProductCriteriaDto(
+            "test", 0, 10, null, "", null, null, null, SortType.DEFAULT);
+        ProductListGetVm result = productService.findProductAdvance(criteriaDto);
+
+        assertNotNull(result);
+        verify(elasticsearchOperations, times(1)).search(any(NativeQuery.class), eq(Product.class));
+    }
+
+    @Test
     void testAutoCompleteProductName_whenExistsProducts_returnProductNameListVm() {
 
         SearchHits<Product> searchHits =
