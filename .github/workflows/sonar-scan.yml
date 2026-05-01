@@ -164,7 +164,7 @@ jobs:
         with:
           # -Dsonar.projectKey=tue29092005a_yas
           args: >
-            -Dsonar.projectKey=yas
+            -Dsonar.projectKey=tue29092005a_yas
             -Dsonar.organization=tue29092005a
             ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
