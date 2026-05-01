@@ -137,7 +137,7 @@ jobs:
         with:
           path: coverage-reports
           pattern: jacoco-report-*
-
+          merge-multiple: false
       - name: Compile project for SonarQube
         run: |
                 mvn package \
@@ -149,7 +149,7 @@ jobs:
       - name: Prepare SonarQube parameters
         id: sonar-params
         run: |
-          COVERAGE_FILES=$(find $(pwd)/coverage-reports -name "jacoco.xml" | tr '\n' ',' | sed 's/,$//')
+          COVERAGE_FILES=$(find coverage-reports -name "jacoco.xml" | tr '\n' ',' | sed 's/,$//')
           if [ -z "$COVERAGE_FILES" ]; then
             echo "::notice::No coverage reports found - SonarQube will analyze without coverage"
             echo "coverage-paths=" >> $GITHUB_OUTPUT

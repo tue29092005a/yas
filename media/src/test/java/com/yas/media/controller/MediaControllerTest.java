@@ -33,7 +33,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-// ts
+// ts32f2
 @WebMvcTest(excludeAutoConfiguration = OAuth2ResourceServerAutoConfiguration.class)
 @ContextConfiguration(classes = {
     MediaController.class,
