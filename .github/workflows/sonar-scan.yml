@@ -280,10 +280,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            # Đổi sang Project Key mới của bạn
-            -Dsonar.projectKey=tue29092005a_yas 
-            # Đổi sang Organization mới của bạn
-            -Dsonar.organization=tue29092005a 
+            -Dsonar.projectKey=yas
+            -Dsonar.organization=tue29092005a
             ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
 
