@@ -274,7 +274,7 @@ jobs:
       # Configuration:
       # - sonar.coverage.jacoco.xmlReportPaths: Path to Jacoco XML reports for coverage
       # - sonar.java.binaries: Path to compiled .class files for binary analysis
-- name: SonarQube Cloud scan
+      - name: SonarQube Cloud scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
