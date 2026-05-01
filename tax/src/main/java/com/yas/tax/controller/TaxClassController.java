@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
+// Trigger CI for tax module
 @RestController
 @RequestMapping(ApiConstant.TAX_CLASS_URL)
 public class TaxClassController {

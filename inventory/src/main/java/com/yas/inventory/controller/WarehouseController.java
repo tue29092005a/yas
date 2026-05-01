@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
+// Trigger CI for inventory module
 @RestController
 @RequestMapping(ApiConstant.WAREHOUSE_URL)
 @RequiredArgsConstructor
