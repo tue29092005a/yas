@@ -140,9 +140,11 @@ jobs:
 
       - name: Compile project for SonarQube
         run: |
-          mvn clean compile \
-            --batch-mode \
-            --fail-at-end
+                mvn package \
+                  -DskipTests \
+                  -Dmaven.main.skip=false \
+                  --batch-mode \
+                  --fail-at-end
 
       - name: Prepare SonarQube parameters
         id: sonar-params
