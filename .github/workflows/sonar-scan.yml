@@ -126,8 +126,7 @@ jobs:
     name: Test Module [${{ matrix.module }}]
     needs: detect-changes
     if: fromJson(needs.detect-changes.outputs.modules) != null && 
-        fromJson(needs.detect-changes.outputs.modules) != '[]' &&
-        length(fromJson(needs.detect-changes.outputs.modules)) > 0
+        fromJson(needs.detect-changes.outputs.modules) != '[]'
     runs-on: ubuntu-latest
     strategy:
       # Dynamic matrix based on changed modules
