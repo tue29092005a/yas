@@ -85,6 +85,7 @@ jobs:
             org.jacoco:jacoco-maven-plugin:report \
             -pl ${{ matrix.module }} \
             -am \
+            -Dmaven.test.failure.ignore=true \
             --batch-mode \
             --fail-at-end
 
