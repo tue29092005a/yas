@@ -49,7 +49,7 @@ jobs:
         env:
           JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
 
-      - name: Snyk Security Scan
+      - name: Snyk Security Scan (Quét lỗ hổng mã nguồn)
         uses: snyk/actions/maven@master
         continue-on-error: true
         env:
@@ -59,7 +59,31 @@ jobs:
           _JAVA_OPTIONS: "-Xmx2g -Xms512m"
         with:
           command : code test
+          args: --severity-threshold=high
+
+      - name: Snyk SCA (Quét lỗ hổng thư viện phụ thuộc)
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
+          NODE_OPTIONS: --max-old-space-size=4096
+          _JAVA_OPTIONS: "-Xmx2g -Xms512m"
+        with:
+          command: test 
           args: --severity-threshold=high --file=media/pom.xml --debug
+
+      - name: Snyk Monitor (Gửi báo cáo lên Dashboard snyk)
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
+          NODE_OPTIONS: --max-old-space-size=4096
+          _JAVA_OPTIONS: "-Xmx2g -Xms512m"
+        with:
+          command: monitor
+          args: --file=media/pom.xml --debug
 
   build:
     name: Build Media Service
