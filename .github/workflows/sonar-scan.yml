@@ -94,7 +94,7 @@ jobs:
         with:
           name: jacoco-report-${{ matrix.module }}
           path: ${{ matrix.module }}/target/site/jacoco/jacoco.xml
-          retention-days: 1 # Chỉ cần lưu 1 ngày để Job 3 lấy dùng, tiết kiệm dung lượng
+          retention-days: 1 
           if-no-files-found: warn
 
   # ============================================================================
@@ -161,8 +161,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
+          # -Dsonar.projectKey=tue29092005a_yas
           args: >
-            -Dsonar.projectKey=tue29092005a_yas
+            -Dsonar.projectKey=yas
             -Dsonar.organization=tue29092005a
             ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
@@ -171,3 +172,6 @@ jobs:
         run: |
           echo "::notice::SonarQube Cloud scan completed successfully"
           echo "View results at: https://sonarcloud.io/project/overview?id=tue29092005a_yas"
+
+
+          
