@@ -1,6 +1,5 @@
 name: SonarQube Cloud Scan with Dynamic Matrix
 
-# Trigger on push to any branch (except main) and pull requests to main
 on:
   push:
     branches:
@@ -10,145 +9,66 @@ on:
     branches:
       - 'main'
 
-# Cancel in-progress workflows when a new workflow is triggered
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # List of modules to monitor for changes (the 10 core modules)
-  # This matches the module directories in the repository
-  MODULES: |
-    media
-    product
-    cart
-    location
-    order
-    customer
-    rating
-    inventory
-    tax
-    search
-
 jobs:
   # ============================================================================
   # Job 1: Detect Changes
-  # Purpose: Identify which module directories have changes using paths-filter
-  # Output: A JSON array of changed modules for use in the matrix strategy
   # ============================================================================
   detect-changes:
     name: Detect Changed Modules
     runs-on: ubuntu-latest
     outputs:
-      # Output the matrix as JSON string for the next job
+      # dorny/paths-filter ĐÃ TỰ ĐỘNG trả về mảng JSON chuẩn (VD: '["tax"]' hoặc '[]')
+      # Nên ta lấy luôn giá trị này truyền cho matrix, không cần bash script xử lý thêm
       modules: ${{ steps.filter.outputs.changes }}
-      # Flag to indicate if there are any changes
-      has-changes: ${{ steps.check-changes.outputs.has-changes }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for accurate change detection
 
-      # Use dorny/paths-filter to detect changes in specific paths
-      # This will check if any files in these module directories have changed
       - name: Filter changed modules
         id: filter
         uses: dorny/paths-filter@v3
         with:
-          base: ${{ github.event.pull_request.base.ref || github.ref }}
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
           filters: |
-            media:
-              - 'media/**'
-            product:
-              - 'product/**'
-            cart:
-              - 'cart/**'
-            location:
-              - 'location/**'
-            order:
-              - 'order/**'
-            customer:
-              - 'customer/**'
-            rating:
-              - 'rating/**'
-            inventory:
-              - 'inventory/**'
-            tax:
-              - 'tax/**'
-            search:
-              - 'search/**'
-
-      # Convert the filter output to a JSON array format for matrix strategy
-      - name: Format module list for matrix
-        id: format-matrix
-        run: |
-          # Extract changed modules and format as JSON array
-          CHANGED_MODULES="${{ steps.filter.outputs.changes }}"
-          # Convert space-separated to JSON array: "[\"media\",\"product\"]"
-          JSON_MODULES=$(echo "$CHANGED_MODULES" | jq -R 'split(" ") | map(select(length > 0)) | @json')
-          echo "matrix=${JSON_MODULES}" >> $GITHUB_OUTPUT
-
-      # Set the matrix output
-      - name: Set matrix output
-        id: set-matrix
-        run: |
-          MODULES='${{ steps.format-matrix.outputs.matrix }}'
-          if [ -z "$MODULES" ] || [ "$MODULES" == "[]" ]; then
-            echo "matrix=[]" >> $GITHUB_OUTPUT
-          else
-            echo "matrix=${MODULES}" >> $GITHUB_OUTPUT
-          fi
-
-      # Check if there are any changed modules
-      - name: Check if there are changes
-        id: check-changes
-        run: |
-          MODULES='${{ steps.set-matrix.outputs.matrix }}'
-          if [ "$MODULES" == "[]" ] || [ -z "$MODULES" ]; then
-            echo "has-changes=false" >> $GITHUB_OUTPUT
-            echo "::notice::No changes detected in monitored modules"
-          else
-            echo "has-changes=true" >> $GITHUB_OUTPUT
-            echo "::notice::Changes detected in modules: ${MODULES}"
-          fi
+            media: 'media/**'
+            product: 'product/**'
+            cart: 'cart/**'
+            location: 'location/**'
+            order: 'order/**'
+            customer: 'customer/**'
+            rating: 'rating/**'
+            inventory: 'inventory/**'
+            tax: 'tax/**'
+            search: 'search/**'
 
   # ============================================================================
   # Job 2: Build & Test with Dynamic Matrix
-  # Purpose: Run tests for each changed module using dynamic matrix strategy
-  # Depends on: detect-changes
-  # Runs only if: there are changed modules
-  # Outputs: Jacoco coverage reports as artifacts
   # ============================================================================
   build-and-test:
     name: Test Module [${{ matrix.module }}]
     needs: detect-changes
-    if: fromJson(needs.detect-changes.outputs.modules) != null && 
-        fromJson(needs.detect-changes.outputs.modules) != '[]'
+    if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
     runs-on: ubuntu-latest
     strategy:
-      # Dynamic matrix based on changed modules
+      fail-fast: false
+      max-parallel: 4
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
-      # Don't cancel other matrix jobs if one fails
-      fail-fast: false
-      # Limit concurrent jobs to reduce GitHub Actions minutes usage
-      max-parallel: 4
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Setup JDK 25 - required for compilation and testing
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           java-version: '25'
-          distribution: 'temurin'  # Eclipse Temurin is a reliable OpenJDK distribution
+          distribution: 'temurin'
 
-      # Cache Maven dependencies to speed up builds
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
@@ -157,14 +77,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # Run tests for the specific module with Jacoco coverage
-      # Command breakdown:
-      # - clean: Remove previous build artifacts
-      # - org.jacoco:jacoco-maven-plugin:prepare-agent: Initialize Jacoco agent
-      # - test: Run unit tests
-      # - org.jacoco:jacoco-maven-plugin:report: Generate Jacoco coverage report
-      # - -pl <module>: Only build the specified module
-      # - -am: Also build all projects that the module depends on (ancestors)
       - name: Run tests and generate Jacoco coverage for ${{ matrix.module }}
         run: |
           mvn clean \
@@ -176,29 +88,21 @@ jobs:
             --batch-mode \
             --fail-at-end
 
-      # Upload Jacoco XML report as artifact
-      # This allows Job 3 (SonarQube scan) to download and analyze coverage data
       - name: Upload Jacoco coverage report for ${{ matrix.module }}
-        if: success() || failure()  # Run even if tests fail to capture coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report-${{ matrix.module }}
           path: ${{ matrix.module }}/target/site/jacoco/jacoco.xml
-          retention-days: 7  # Keep artifacts for 7 days to save storage
-          if-no-files-found: warn  # Warn if no coverage file found
+          retention-days: 1 # Chỉ cần lưu 1 ngày để Job 3 lấy dùng, tiết kiệm dung lượng
+          if-no-files-found: warn
 
   # ============================================================================
   # Job 3: SonarQube Cloud Scan
-  # Purpose: Perform code quality analysis using SonarQube Cloud
-  # Depends on: detect-changes, build-and-test
-  # Runs: Always (even if no tests were triggered) to ensure code quality scan
-  # Collects: Jacoco coverage reports from Job 2 and performs quality scan
   # ============================================================================
   sonarqube-scan:
     name: SonarQube Cloud Scan
     needs: [detect-changes, build-and-test]
-    # Use 'always()' to run this job regardless of previous job outcomes
-    # This ensures SonarQube scans even if no modules changed (for PR analysis)
     if: always()
     runs-on: ubuntu-latest
 
@@ -206,16 +110,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for SonarQube analysis
+          fetch-depth: 0
 
-      # Setup JDK 25 - required for code compilation
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           java-version: '25'
           distribution: 'temurin'
 
-      # Cache Maven dependencies
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
@@ -224,39 +126,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # Create output directory for coverage files
       - name: Create coverage output directory
         run: mkdir -p coverage-reports
 
-      # Download all Jacoco coverage reports from Job 2
-      # These reports are used by SonarQube for coverage analysis
       - name: Download Jacoco coverage reports
-        if: needs.detect-changes.outputs.has-changes == 'true'
+        # Chỉ cố download nếu Job 2 thực sự đã chạy và tạo file (tránh cảnh báo đỏ lỗi download)
+        if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
         uses: actions/download-artifact@v4
         with:
           path: coverage-reports
           pattern: jacoco-report-*
 
-      # List downloaded artifacts for debugging purposes
-      - name: List downloaded coverage reports
-        run: |
-          echo "Coverage reports structure:"
-          find coverage-reports -type f -name "*.xml" | head -20
-
-      # Compile the project to generate .class files
-      # SonarQube requires compiled Java binaries for accurate code analysis
       - name: Compile project for SonarQube
         run: |
           mvn clean compile \
             --batch-mode \
             --fail-at-end
 
-      # Prepare SonarQube parameters
-      # This constructs the paths to coverage reports for SonarQube
       - name: Prepare SonarQube parameters
         id: sonar-params
         run: |
-          # Find all jacoco.xml files and join them with commas
           COVERAGE_FILES=$(find coverage-reports -name "jacoco.xml" -type f | paste -sd "," -)
           if [ -z "$COVERAGE_FILES" ]; then
             echo "::notice::No coverage reports found - SonarQube will analyze without coverage"
@@ -266,13 +155,6 @@ jobs:
             echo "coverage-paths=$COVERAGE_FILES" >> $GITHUB_OUTPUT
           fi
 
-      # Run SonarQube Cloud scan with Jacoco coverage data
-      # Environment variables:
-      # - SONAR_TOKEN: Authentication token for SonarQube Cloud (stored as secret)
-      # - GITHUB_TOKEN: GitHub token for PR analysis and decorations
-      # Configuration:
-      # - sonar.coverage.jacoco.xmlReportPaths: Path to Jacoco XML reports for coverage
-      # - sonar.java.binaries: Path to compiled .class files for binary analysis
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -280,14 +162,12 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=yas
+            -Dsonar.projectKey=tue29092005a_yas
             -Dsonar.organization=tue29092005a
             ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
 
-      # Post-scan notification
       - name: SonarQube scan completed
         run: |
           echo "::notice::SonarQube Cloud scan completed successfully"
-          # Cập nhật lại link hiển thị kết quả cho đúng với project của bạn
           echo "View results at: https://sonarcloud.io/project/overview?id=tue29092005a_yas"
