@@ -29,13 +29,13 @@ jobs:
 
 #tạo artifact để upload / tạo độ phủ cho testcase  
       - name: Upload Test Coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c86da06ee04569841a3397701959d1a7774074 # v4
         with:
           name: coverage-report
           path: coverage/
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c86da06ee04569841a3397701959d1a7774074 # v4
         with:
           name: test-results
           path: test-results/
