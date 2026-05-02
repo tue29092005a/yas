@@ -1,4 +1,4 @@
-name: SonarQube Cloud Scan with Dynamic Matrix
+name: SonarQube Cloud Scan with Auto-Detection
 
 on:
   push:
@@ -15,23 +15,26 @@ concurrency:
 
 jobs:
   # ============================================================================
-  # Job 1: Detect Changes
+  # Job 1: Auto-Detect Changed Modules & Tested Modules
   # ============================================================================
-  detect-changes:
-    name: Detect Changed Modules
+  detect-modules:
+    name: Detect Changed & Tested Modules
     runs-on: ubuntu-latest
     outputs:
-      # dorny/paths-filter ĐÃ TỰ ĐỘNG trả về mảng JSON chuẩn (VD: '["tax"]' hoặc '[]')
-      # Nên ta lấy luôn giá trị này truyền cho matrix, không cần bash script xử lý thêm
-      modules: ${{ steps.filter.outputs.changes }}
+      changed-modules: ${{ steps.filter.outputs.changes }}
+      tested-modules: ${{ steps.detect-tested.outputs.modules }}
+      has-coverage: ${{ steps.detect-tested.outputs.has-coverage }}
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6 # Đã update
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # ============ Detect changed modules ============
       - name: Filter changed modules
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@v3
         with:
           filters: |
             media: 'media/**'
@@ -45,39 +48,96 @@ jobs:
             tax: 'tax/**'
             search: 'search/**'
 
+      # ============ Auto-detect modules with tests ============
+      - name: Detect tested modules
+        id: detect-tested
+        run: |
+          ALL_MODULES=("media" "product" "cart" "location" "order" "customer" "rating" "inventory" "tax" "search")
+          TESTED_MODULES=()
+          
+          echo "Scanning for test files..."
+          
+          for module in "${ALL_MODULES[@]}"; do
+            # Kiểm tra xem có file *Test.java hoặc *Tests.java
+            test_files=$(find "$module/src/test" -name "*Test.java" -o -name "*Tests.java" 2>/dev/null | wc -l || echo 0)
+            
+            if [ "$test_files" -gt 0 ]; then
+              echo "✓ Module '$module' has tests ($test_files test files)"
+              TESTED_MODULES+=("$module")
+            else
+              echo "✗ Module '$module' has no tests"
+            fi
+          done
+          
+          # Tạo JSON array
+          json_array="["
+          for i in "${!TESTED_MODULES[@]}"; do
+            if [ $i -gt 0 ]; then
+              json_array+=","
+            fi
+            json_array+="\"${TESTED_MODULES[$i]}\""
+          done
+          json_array+="]"
+          
+          echo "modules=$json_array" >> $GITHUB_OUTPUT
+          
+          # Check if we have any tested modules
+          if [ ${#TESTED_MODULES[@]} -eq 0 ]; then
+            echo "has-coverage=false" >> $GITHUB_OUTPUT
+            echo "::warning::No modules with test code found"
+          else
+            echo "has-coverage=true" >> $GITHUB_OUTPUT
+            echo "::notice::Found ${#TESTED_MODULES[@]} modules with tests: $json_array"
+          fi
+
   # ============================================================================
   # Job 2: Build & Test with Dynamic Matrix
   # ============================================================================
   build-and-test:
     name: Test Module [${{ matrix.module }}]
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
+    needs: detect-modules
+    # Hanya run jika ada modules yang changed
+    if: ${{ needs.detect-modules.outputs.changed-modules != '[]' && needs.detect-modules.outputs.changed-modules != '' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
-        module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
+        module: ${{ fromJson(needs.detect-modules.outputs.changed-modules) }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6 # Đã update
+        uses: actions/checkout@v4
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5 # Đã update
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Cache Maven packages
-        uses: actions/cache@v5 # Đã update
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      # Check if this module has tests
+      - name: Check if module has tests
+        id: check-tests
+        run: |
+          if [ -d "${{ matrix.module }}/src/test" ] && find "${{ matrix.module }}/src/test" -name "*Test.java" -o -name "*Tests.java" | grep -q .; then
+            echo "has-tests=true" >> $GITHUB_OUTPUT
+            echo "✓ Module '${{ matrix.module }}' has test code"
+          else
+            echo "has-tests=false" >> $GITHUB_OUTPUT
+            echo "⚠ Module '${{ matrix.module }}' has NO test code - skipping tests"
+          fi
+
+      # Only run tests if module has tests
       - name: Run tests and generate Jacoco coverage for ${{ matrix.module }}
+        if: steps.check-tests.outputs.has-tests == 'true'
         run: |
           mvn clean \
             org.jacoco:jacoco-maven-plugin:prepare-agent \
@@ -89,38 +149,49 @@ jobs:
             --batch-mode \
             --fail-at-end
 
+      # Only upload if tests ran
       - name: Upload Jacoco coverage report for ${{ matrix.module }}
-        if: always()
-        uses: actions/upload-artifact@v7 # Đã update
+        if: steps.check-tests.outputs.has-tests == 'true' && always()
+        uses: actions/upload-artifact@v4
         with:
           name: jacoco-report-${{ matrix.module }}
           path: ${{ matrix.module }}/target/site/jacoco/jacoco.xml
           retention-days: 1 
           if-no-files-found: warn
 
+      # If no tests, still compile
+      - name: Compile module ${{ matrix.module }} (no tests)
+        if: steps.check-tests.outputs.has-tests == 'false'
+        run: |
+          mvn clean compile \
+            -pl ${{ matrix.module }} \
+            -am \
+            --batch-mode \
+            --fail-at-end
+
   # ============================================================================
   # Job 3: SonarQube Cloud Scan
   # ============================================================================
   sonarqube-scan:
     name: SonarQube Cloud Scan
-    needs: [detect-changes, build-and-test]
+    needs: [detect-modules, build-and-test]
     if: always()
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6 # Đã update
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5 # Đã update
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Cache Maven packages
-        uses: actions/cache@v5 # Đã update
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -130,56 +201,85 @@ jobs:
       - name: Create coverage output directory
         run: mkdir -p coverage-reports
 
+      # Download coverage reports
       - name: Download Jacoco coverage reports
-        # Chỉ cố download nếu Job 2 thực sự đã chạy và tạo file (tránh cảnh báo đỏ lỗi download)
-        if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
-        uses: actions/download-artifact@v8 # Đã update
+        if: ${{ needs.detect-modules.outputs.has-coverage == 'true' }}
+        uses: actions/download-artifact@v4
         with:
           path: coverage-reports
           pattern: jacoco-report-*
-          merge-multiple: false
+
       - name: Compile project for SonarQube
         run: |
-                mvn package \
-                  -DskipTests \
-                  -Dmaven.main.skip=false \
-                  --batch-mode \
-                  --fail-at-end
+          mvn package \
+            -DskipTests \
+            -Dmaven.main.skip=false \
+            --batch-mode \
+            --fail-at-end
 
+      # Smart coverage path building
       - name: Prepare SonarQube parameters
         id: sonar-params
         run: |
-          COVERAGE_FILES=$(find coverage-reports -name "jacoco.xml" | tr '\n' ',' | sed 's/,$//')
+          TESTED_MODULES='${{ needs.detect-modules.outputs.tested-modules }}'
+          COVERAGE_FILES=""
+          COVERAGE_COUNT=0
+          
+          echo "🔍 Looking for coverage files from tested modules..."
+          
+          if [ "$TESTED_MODULES" != "[]" ]; then
+            for module in $(echo "$TESTED_MODULES" | jq -r '.[]'); do
+              coverage_file="coverage-reports/jacoco-report-${module}/jacoco.xml"
+              if [ -f "$coverage_file" ]; then
+                echo "✓ Found coverage for module: $module"
+                if [ -z "$COVERAGE_FILES" ]; then
+                  COVERAGE_FILES="$coverage_file"
+                else
+                  COVERAGE_FILES="$COVERAGE_FILES,$coverage_file"
+                fi
+                ((COVERAGE_COUNT++))
+              else
+                echo "⚠ Coverage not found for module: $module"
+              fi
+            done
+          else
+            echo "⚠ No tested modules found"
+          fi
+          
           if [ -z "$COVERAGE_FILES" ]; then
-            echo "::notice::No coverage reports found - SonarQube will analyze without coverage"
+            echo "::notice::No coverage reports found - SonarQube will analyze without coverage metrics"
             echo "coverage-paths=" >> $GITHUB_OUTPUT
           else
-            echo "::notice::Using coverage reports: $COVERAGE_FILES"
+            echo "::notice::Using $COVERAGE_COUNT coverage report(s)"
+            echo "::notice::Coverage files: $COVERAGE_FILES"
             echo "coverage-paths=$COVERAGE_FILES" >> $GITHUB_OUTPUT
           fi
 
+      - name: List downloaded files (Debug)
+        run: |
+          echo "=== Coverage Reports Directory ==="
+          ls -R coverage-reports 2>/dev/null || echo "No coverage directory found"
+
       - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v5.0.0 # Đã là phiên bản mới nhất
+        uses: SonarSource/sonarqube-scan-action@v2.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # -Dsonar.projectKey=tue29092005a_yas
           args: >
             -Dsonar.projectKey=tue29092005a_yas
             -Dsonar.organization=tue29092005a
-            ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
+            ${{ steps.sonar-params.outputs.coverage-paths != '' && 
+                format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', 
+                steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
             -Dsonar.exclusions=**/src/test/**,**/config/**,**/dto/**,**/entity/**,**/*Exception.java
-            ${{ steps.sonar-params.outputs.changed-files != '' && format('-Dsonar.inclusions={0}', steps.sonar-params.outputs.changed-files) || '' }}
-            
-      - name: List downloaded files (Debug)
-        run: ls -R coverage-reports
 
       - name: SonarQube scan completed
         run: |
-          echo "::notice::SonarQube Cloud scan completed successfully"
-          echo "View results at: https://sonarcloud.io/project/overview?id=tue29092005a_yas"
-
-
-          
+          if [ "${{ steps.sonar-params.outputs.coverage-paths }}" != "" ]; then
+            echo "✅ SonarQube scan completed with coverage metrics"
+          else
+            echo "⚠️ SonarQube scan completed WITHOUT coverage metrics"
+          fi
+          echo "::notice::View results at: https://sonarcloud.io/project/overview?id=tue29092005a_yas"
