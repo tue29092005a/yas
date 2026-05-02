@@ -18,12 +18,12 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           
       - name: Gitleaks Scan
-        uses: gitleaks/gitleaks-action@3ad3510953f1a20562018e15a18801fdda2d4444 # v2
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -32,7 +32,7 @@ jobs:
         id: java-setup
       # Thêm cache để không phải tải lại các dependency của Maven cho mỗi lần chạy
       - name: Cache Maven packages
-        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
@@ -50,7 +50,7 @@ jobs:
           JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
 
       - name: Snyk Security Scan (Quét lỗ hổng mã nguồn)
-        uses: snyk/actions/maven@de2dda6636773522a9f676227483479746f079f4 # master
+        uses: snyk/actions/maven@master
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -62,7 +62,7 @@ jobs:
           args: --severity-threshold=high
 
       - name: Snyk SCA (Quét lỗ hổng thư viện phụ thuộc)
-        uses: snyk/actions/maven@de2dda6636773522a9f676227483479746f079f4 # master
+        uses: snyk/actions/maven@master
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -74,7 +74,7 @@ jobs:
           args: --severity-threshold=high --file=media/pom.xml --debug
 
       - name: Snyk Monitor (Gửi báo cáo lên Dashboard snyk)
-        uses: snyk/actions/maven@de2dda6636773522a9f676227483479746f079f4 # master
+        uses: snyk/actions/maven@master
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -92,7 +92,7 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@v4
 
       - name: Setup Java/Maven Environment
         uses: ./.github/workflows/actions
@@ -100,7 +100,7 @@ jobs:
 
       # Dùng lại cache ở job trên để tăng tốc độ build
       - name: Cache Maven packages
-        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
