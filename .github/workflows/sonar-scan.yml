@@ -170,7 +170,9 @@ jobs:
             -Dsonar.organization=tue29092005a
             ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
-
+            -Dsonar.exclusions=**/src/test/**,**/config/**,**/dto/**,**/entity/**,**/*Exception.java
+            ${{ steps.sonar-params.outputs.changed-files != '' && format('-Dsonar.inclusions={0}', steps.sonar-params.outputs.changed-files) || '' }}
+            
       - name: List downloaded files (Debug)
         run: ls -R coverage-reports
 
