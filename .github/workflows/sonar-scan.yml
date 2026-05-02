@@ -21,18 +21,17 @@ jobs:
     name: Detect Changed Modules
     runs-on: ubuntu-latest
     outputs:
+      # dorny/paths-filter ĐÃ TỰ ĐỘNG trả về mảng JSON chuẩn (VD: '["tax"]' hoặc '[]')
+      # Nên ta lấy luôn giá trị này truyền cho matrix, không cần bash script xử lý thêm
       modules: ${{ steps.filter.outputs.changes }}
-      tested-modules: ${{ steps.set-tested.outputs.modules }}
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v6 # Đã update
 
       - name: Filter changed modules
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             media: 'media/**'
@@ -45,15 +44,6 @@ jobs:
             inventory: 'inventory/**'
             tax: 'tax/**'
             search: 'search/**'
-            common-library: 'common-library/**'
-
-      - name: Set tested modules
-        id: set-tested
-        run: |
-          # Define modules that have test code
-          TESTED_MODULES='["tax","customer","order","product"]'
-          echo "modules=$TESTED_MODULES" >> $GITHUB_OUTPUT
-          echo "Tested modules: $TESTED_MODULES"
 
   # ============================================================================
   # Job 2: Build & Test with Dynamic Matrix
@@ -71,16 +61,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6 # Đã update
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5 # Đã update
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: 'temurin'
 
       - name: Cache Maven packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5 # Đã update
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -101,7 +91,7 @@ jobs:
 
       - name: Upload Jacoco coverage report for ${{ matrix.module }}
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7 # Đã update
         with:
           name: jacoco-report-${{ matrix.module }}
           path: ${{ matrix.module }}/target/site/jacoco/jacoco.xml
@@ -119,18 +109,18 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6 # Đã update
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5 # Đã update
         with:
-          java-version: '21'
+          java-version: '25'
           distribution: 'temurin'
 
       - name: Cache Maven packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5 # Đã update
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -141,42 +131,25 @@ jobs:
         run: mkdir -p coverage-reports
 
       - name: Download Jacoco coverage reports
+        # Chỉ cố download nếu Job 2 thực sự đã chạy và tạo file (tránh cảnh báo đỏ lỗi download)
         if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8 # Đã update
         with:
           path: coverage-reports
           pattern: jacoco-report-*
-
+          merge-multiple: false
       - name: Compile project for SonarQube
         run: |
-          mvn clean package \
-            -DskipTests \
-            -Dmaven.main.skip=false \
-            --batch-mode \
-            --fail-at-end
+                mvn package \
+                  -DskipTests \
+                  -Dmaven.main.skip=false \
+                  --batch-mode \
+                  --fail-at-end
 
       - name: Prepare SonarQube parameters
         id: sonar-params
         run: |
-          TESTED_MODULES='["tax","customer","order","product"]'
-          COVERAGE_FILES=""
-          
-          echo "Looking for coverage files from tested modules..."
-          
-          for module in $(echo $TESTED_MODULES | jq -r '.[]'); do
-            coverage_file="coverage-reports/jacoco-report-${module}/jacoco.xml"
-            if [ -f "$coverage_file" ]; then
-              echo "✓ Found coverage for module: $module"
-              if [ -z "$COVERAGE_FILES" ]; then
-                COVERAGE_FILES="$coverage_file"
-              else
-                COVERAGE_FILES="$COVERAGE_FILES,$coverage_file"
-              fi
-            else
-              echo "⚠ Coverage not found for module: $module (tests may have been skipped)"
-            fi
-          done
-          
+          COVERAGE_FILES=$(find coverage-reports -name "jacoco.xml" | tr '\n' ',' | sed 's/,$//')
           if [ -z "$COVERAGE_FILES" ]; then
             echo "::notice::No coverage reports found - SonarQube will analyze without coverage"
             echo "coverage-paths=" >> $GITHUB_OUTPUT
@@ -185,23 +158,22 @@ jobs:
             echo "coverage-paths=$COVERAGE_FILES" >> $GITHUB_OUTPUT
           fi
 
-      - name: List downloaded files (Debug)
-        run: |
-          echo "=== Coverage Reports Structure ==="
-          ls -R coverage-reports 2>/dev/null || echo "No coverage directory"
-
       - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v2.1.0
+        uses: SonarSource/sonarqube-scan-action@v5.0.0 # Đã là phiên bản mới nhất
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
+          # -Dsonar.projectKey=tue29092005a_yas
           args: >
             -Dsonar.projectKey=tue29092005a_yas
             -Dsonar.organization=tue29092005a
             ${{ steps.sonar-params.outputs.coverage-paths != '' && format('-Dsonar.coverage.jacoco.xmlReportPaths={0}', steps.sonar-params.outputs.coverage-paths) || '' }}
             -Dsonar.java.binaries=**/target/classes
             -Dsonar.exclusions=**/src/test/**,**/config/**,**/dto/**,**/entity/**,**/*Exception.java
+
+      - name: List downloaded files (Debug)
+        run: ls -R coverage-reports
 
       - name: SonarQube scan completed
         run: |
