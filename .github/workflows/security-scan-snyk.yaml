@@ -23,9 +23,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java/Maven Environment
-        uses: ./.github/workflows/actions
-        id: java-setup
+      - name: Set up JDK 25 Early Access (Temurin EA)
+        uses: actions/setup-java@v4   # actions/setup-java tự export JAVA_HOME vào $PATH — không cần set thủ công
+        with:
+          java-version: '25-ea'
+          distribution: 'temurin'
 
       - name: Cache Maven packages
         uses: actions/cache@v4
@@ -36,8 +38,6 @@ jobs:
 
       - name: Download Dependencies
         run: mvn dependency:go-offline -q
-        env:
-          JAVA_HOME: ${{ steps.java-setup.outputs.JAVA_HOME }}
 
       # ----------------------------------------------------------------
       # SAST: Quét lỗ hổng mã nguồn Java
