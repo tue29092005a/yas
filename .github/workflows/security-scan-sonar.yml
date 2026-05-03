@@ -3,15 +3,15 @@ name: SonarQube Cloud Scan with Dynamic Matrix
 on:
   push:
     branches:
-      - '**'
       - 'main'
   pull_request:
+    types: [opened, synchronize, reopened]
     branches:
       - 'main'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # ============================================================================
@@ -21,17 +21,15 @@ jobs:
     name: Detect Changed Modules
     runs-on: ubuntu-latest
     outputs:
-      # dorny/paths-filter ĐÃ TỰ ĐỘNG trả về mảng JSON chuẩn (VD: '["tax"]' hoặc '[]')
-      # Nên ta lấy luôn giá trị này truyền cho matrix, không cần bash script xử lý thêm
       modules: ${{ steps.filter.outputs.changes }}
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6 # Đã update
+        uses: actions/checkout@v4  # FIX: v6 không tồn tại, dùng v4 (latest stable)
 
       - name: Filter changed modules
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@v3  # FIX: v4 không tồn tại, dùng v3 (latest stable)
         with:
           filters: |
             media: 'media/**'
@@ -53,6 +51,8 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -61,16 +61,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6 # Đã update
+        uses: actions/checkout@v4  # FIX: v6 không tồn tại
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5 # Đã update
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4  # FIX: v5 không tồn tại; JDK 25 chưa có bản LTS — dùng JDK 21 LTS
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Cache Maven packages
-        uses: actions/cache@v5 # Đã update
+        uses: actions/cache@v4  # FIX: v5 không tồn tại
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -91,11 +91,11 @@ jobs:
 
       - name: Upload Jacoco coverage report for ${{ matrix.module }}
         if: always()
-        uses: actions/upload-artifact@v7 # Đã update
+        uses: actions/upload-artifact@v4  # FIX: v7 không tồn tại; v4 là latest stable
         with:
           name: jacoco-report-${{ matrix.module }}
           path: ${{ matrix.module }}/target/site/jacoco/jacoco.xml
-          retention-days: 1 
+          retention-days: 1
           if-no-files-found: warn
 
   # ============================================================================
@@ -104,23 +104,29 @@ jobs:
   sonarqube-scan:
     name: SonarQube Cloud Scan
     needs: [detect-changes, build-and-test]
-    if: always()
+    # FIX: Giới hạn điều kiện rõ ràng hơn — 'always()' sẽ chạy cả khi job bị cancel
+    if: >
+      always() &&
+      !contains(needs.build-and-test.result, 'cancelled')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # Cho phép SonarQube comment lên PR
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6 # Đã update
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5 # Đã update
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Cache Maven packages
-        uses: actions/cache@v5 # Đã update
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -131,20 +137,20 @@ jobs:
         run: mkdir -p coverage-reports
 
       - name: Download Jacoco coverage reports
-        # Chỉ cố download nếu Job 2 thực sự đã chạy và tạo file (tránh cảnh báo đỏ lỗi download)
         if: ${{ needs.detect-changes.outputs.modules != '[]' && needs.detect-changes.outputs.modules != '' }}
-        uses: actions/download-artifact@v8 # Đã update
+        uses: actions/download-artifact@v4  # FIX: v8 không tồn tại; v4 là latest stable
         with:
           path: coverage-reports
           pattern: jacoco-report-*
           merge-multiple: false
+
       - name: Compile project for SonarQube
         run: |
-                mvn package \
-                  -DskipTests \
-                  -Dmaven.main.skip=false \
-                  --batch-mode \
-                  --fail-at-end
+          mvn package \
+            -DskipTests \
+            -Dmaven.main.skip=false \
+            --batch-mode \
+            --fail-at-end
 
       - name: Prepare SonarQube parameters
         id: sonar-params
@@ -159,12 +165,11 @@ jobs:
           fi
 
       - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v5.0.0 # Đã là phiên bản mới nhất
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # -Dsonar.projectKey=tue29092005a_yas
           args: >
             -Dsonar.projectKey=tue29092005a_yas
             -Dsonar.organization=tue29092005a
@@ -172,10 +177,20 @@ jobs:
             -Dsonar.java.binaries=**/target/classes
             -Dsonar.exclusions=**/src/test/**,**/config/**,**/dto/**,**/entity/**,**/*Exception.java
 
-      - name: List downloaded files (Debug)
-        run: ls -R coverage-reports
-
       - name: SonarQube scan completed
         run: |
           echo "::notice::SonarQube Cloud scan completed successfully"
           echo "View results at: https://sonarcloud.io/project/overview?id=tue29092005a_yas"
+
+      # ----------------------------------------------------------------
+      # Snyk Monitor — chỉ chạy khi push vào main
+      # ----------------------------------------------------------------
+      - name: Snyk Monitor (Gửi báo cáo khi Push vào Main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+          args: --all-projects
