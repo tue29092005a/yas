@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 // Trigger CI for media module sfwef ưefwef
-// test 
+// test fwewfewefwefwef
 @Validated
 @RestController
 @CrossOrigin(origins = "*", maxAge = 3600)
